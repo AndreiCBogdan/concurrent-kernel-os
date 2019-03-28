@@ -19,7 +19,7 @@
 #include   "GIC.h"
 #include "PL011.h"
 #include "SP804.h"
-
+#include "console.h"
 // Include functionality relating to the   kernel.
 
 #include "lolevel.h"
@@ -46,6 +46,7 @@ typedef enum {
   STATUS_EXECUTING,
   STATUS_WAITING,
   STATUS_TERMINATED
+
 } status_t;
 
 typedef struct {
@@ -53,9 +54,11 @@ typedef struct {
 } ctx_t;
 
 typedef struct {
-     pid_t    pid;
-  status_t status;
-     ctx_t    ctx;
+     pid_t      pid;
+  status_t   status;
+     ctx_t      ctx;
+       int      age;
+       int priority;
 } pcb_t;
 
 
