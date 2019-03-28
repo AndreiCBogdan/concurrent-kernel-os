@@ -63,7 +63,7 @@ pid_t highest_priority(){
 //Increases age of non executing functions
 void increase_age(int next){
    pcb[next].age = 0; //reset the age of an executing process
-   for(int process = 0; process<no_processes_running ; process++){
+   for(int process = 0; process<no_processes ; process++){
        if((process != next) && pcb[process].status != STATUS_TERMINATED)
            pcb[process].age++;
 
@@ -159,7 +159,7 @@ void hilevel_handler_rst(ctx_t* ctx) {
    //MAKES IT EASIER TO FIND THE NEXT EMPTY PCB SPACE
    //bad practice??
    for (int i=0; i<no_processes; i++){
-       pcb[i].status == STATUS_TERMINATED;
+       pcb[i].status = STATUS_TERMINATED;
    }
 
 
