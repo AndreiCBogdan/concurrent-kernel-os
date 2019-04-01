@@ -5,35 +5,29 @@
 * LICENSE.txt within the associated archive or repository).
 */
 
+/*TODO: pretty print processes
+ *
+ */
+
 #include "hilevel.h"
 
-#define no_processes 32
-#define PRIORITY     (1)
-#define ROUND_ROBIN  (2)
+#define no_processes 32 //including console
+
 
 
 //Currently executing program information
 int no_processes_running = 0;
 int current_executing = 0; // index of current executing PCB
-//no point in looping through all proccesses only up the most recent one
-pid_t last_process_pid = 0;  // pid of the last PCB element (0th is console)i.e max index
 
-pid_t high = 0;
+
 int offset = 0x00001000;
 pcb_t pcb[ no_processes ];
 pcb_t* current = NULL;
 
-extern void     main_P3();
-extern uint32_t tos_P3;
-extern void     main_P4();
-extern uint32_t tos_P4;
-extern void     main_P5();
-extern uint32_t tos_P5;
 //console may already have the above programs in it
 extern void     main_console();
 extern uint32_t tos_console;
 // general stack for processes
-// DO I NEED 2 STACK SPACES??
 extern uint32_t tos_stack;
 
 
@@ -45,53 +39,71 @@ void c_print(char* x,int n){
  }
 }
 
+void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
+  if( NULL != prev ) {
+    memcpy( &prev->ctx, ctx, sizeof( ctx_t ) ); // preserve execution context of P_{prev}
+  }
+  if( NULL != next ) {
+    memcpy( ctx, &next->ctx, sizeof( ctx_t ) ); // restore  execution context of P_{next}
+  }
+  current = next;                             // update   executing index   to P_{next}
 
+  PL011_putc( UART0, '[', true );
+  PL011_putc( UART0, '0' + prev->pid, true );
+  PL011_putc( UART0, '-', true );
+  PL011_putc( UART0, '>', true );
+  PL011_putc( UART0, '0' + next->pid, true );
+  PL011_putc( UART0, ']', true );
+  //update executing status
+  prev->status = STATUS_READY;
+  next->status = STATUS_EXECUTING;
+  return;
+}
+
+//GET RID OF THIS
 //Returns index of process with highest priority
-pid_t highest_priority(){
-   int next_index = 0;
-   int priority = 0;
+pcb_t* highest_priority(){
+   pcb_t* next = NULL;
    int highest_priority = 0;
    for(int i = 0 ; i <no_processes ; i++){
-       priority = pcb[ i ].age + pcb[ i ].priority;
+       int priority = pcb[ i ].age + pcb[ i ].priority;
        if (priority>highest_priority && pcb[i].status != STATUS_TERMINATED) {
            highest_priority = priority;
-           next_index = i;
+           next = &pcb[i];
        }
    }
-   return next_index;
+   return next;
 }
 //Increases age of non executing functions
-void increase_age(int next){
-   pcb[next].age = 0; //reset the age of an executing process
+void increase_age(pcb_t* next){
+   next->age = 0; //reset the age of an executing process
    for(int process = 0; process<no_processes ; process++){
-       if((process != next) && pcb[process].status != STATUS_TERMINATED)
+       if((pcb[process].pid != next->pid) && pcb[process].status != STATUS_TERMINATED)
            pcb[process].age++;
 
    }
 
    return;
 }
-
+/*
 void dispatch(ctx_t* ctx, int next){
-   char prev_pid = '?', next_pid = '?';
    //Do nothing if the process hasn't changed
    if (pcb[next].pid != pcb[current_executing].pid && pcb[next].status != STATUS_TERMINATED) {
        memcpy( &pcb[current_executing].ctx, ctx, sizeof( ctx_t ) ); // Preserve executing
-       //REMOVE
-       prev_pid = '0' + pcb[current_executing].pid;
+
        if (pcb[current_executing].status == STATUS_EXECUTING) {
            pcb[current_executing].status = STATUS_READY;
        }
        memcpy( ctx, &pcb[next].ctx, sizeof( ctx_t ) );
        pcb[next].status = STATUS_EXECUTING;
-       next_pid = '0' + pcb[next].pid;
+       next_pid = ;
        //change this to print in a nicer format each interrupt
        PL011_putc( UART0, '[',      true );
        PL011_putc( UART0, 'P',      true );
-       PL011_putc( UART0, prev_pid, true );
+       PL011_putc( UART0, '0' + pcb[current_executing].pid, true );
        PL011_putc( UART0, '-',      true );
        PL011_putc( UART0, '>',      true );
-       PL011_putc( UART0, next_pid, true );
+       PL011_putc( UART0, '0' + pcb[next].pid, true );
        PL011_putc( UART0, ']',      true );
 
 
@@ -101,7 +113,7 @@ void dispatch(ctx_t* ctx, int next){
 
    }
    return;
-}
+}*/
 
 //Round Robin CHANGE THIS
 /*void schedule(ctx_t* ctx){
@@ -120,15 +132,27 @@ void dispatch(ctx_t* ctx, int next){
 
 //WORKS!!!
 void priority_schedule(ctx_t* ctx) {
-   int next_process = highest_priority();
-   dispatch(ctx,next_process);
-   increase_age(next_process);
+  pcb_t* prev = current;
+  pcb_t* next = current;
 
+  int highest_priority = 0;
+  for(int i=0; i<no_processes; i++){
+    if(pcb[i].status != STATUS_TERMINATED){
+    //if last executed process
+      if(current->pid == pcb[i].pid){
+        prev = &pcb[i];
+      }
 
-   PL011_putc( UART0, '[',      true );
-   PL011_putc( UART0, 'S',      true );
-   PL011_putc( UART0, '0'+ next_process, true );
-   PL011_putc( UART0, ']',      true );
+      int priority = pcb[i].age + pcb[i].priority;
+      if(highest_priority <= priority){
+        next = &pcb[i];
+        highest_priority = priority;
+      }
+    }
+  }
+  increase_age(next);
+  dispatch( ctx, prev, next);
+
 }
 
 //allocates stack region to a process given a pid
@@ -142,7 +166,7 @@ uint32_t allocate_stack(pid_t pid){
 void hilevel_handler_rst(ctx_t* ctx) {
 
    //Assuming arrays are contiguous
- memset(pcb, 0, no_processes * sizeof(pcb_t));
+   //memset(pcb, 0, no_processes * sizeof(pcb_t));
 
    TIMER0->Timer1Load  = 0x00100000; // select period = 2^20 ticks ~= 1 sec
    TIMER0->Timer1Ctrl  = 0x00000002; // select 32-bit   timer
@@ -155,28 +179,35 @@ void hilevel_handler_rst(ctx_t* ctx) {
    GICC0->CTLR         = 0x00000001; // enable GIC interface
    GICD0->CTLR         = 0x00000001; // enable GIC distributor
 
-   //INITIALISE ALL PROGRAMS TO STATUS TERMINATED
-   //MAKES IT EASIER TO FIND THE NEXT EMPTY PCB SPACE
-   //bad practice??
-   for (int i=0; i<no_processes; i++){
-       pcb[i].status = STATUS_TERMINATED;
-   }
-
-
    //INITIALISE CONSOLE TO BE THE FIRST PROGRAM
 
-   //memset( &pcb[ 0 ], 0, sizeof( pcb_t ) );     // initialise 0-th PCB = console
+   memset( &pcb[ 0 ], 0, sizeof( pcb_t ) );     // initialise 0-th PCB = console
    pcb[ 0 ].pid      = 0;
    pcb[ 0 ].status   = STATUS_READY;
    pcb[ 0 ].ctx.cpsr = 0x50;
    pcb[ 0 ].ctx.pc   = ( uint32_t )( &main_console );
    pcb[ 0 ].ctx.sp   = ( uint32_t )( &tos_stack );
    pcb[ 0 ].priority = 1;
- pcb[ 0 ].age      = 0;
+   pcb[ 0 ].age      = 0;
+
+   //instantiate the rest of the pcbs as empty
+   for(int i=1; i<no_processes; i++){
+       memset( &pcb[ i ], 0, sizeof( pcb_t ) );
+       pcb[ i ].pid      = i;
+       pcb[ i ].status   = STATUS_TERMINATED;
+       pcb[ i ].ctx.cpsr = 0x50;
+       pcb[ i ].ctx.pc   = ( uint32_t )( &main_console );
+       pcb[ i ].ctx.sp   = allocate_stack(i);
+       pcb[ i ].priority = 1;
+       pcb[ i ].age      = 0;
+   }
+
    //EXECUTE CONSOLE
-   memcpy(ctx, &pcb[0].ctx, sizeof(ctx_t));
- pcb[0].status = STATUS_EXECUTING;
- no_processes_running = 1;
+   dispatch(ctx,NULL,&pcb[0]);
+   //memcpy(ctx, &pcb[0].ctx, sizeof(ctx_t));
+   //pcb[0].status = STATUS_EXECUTING;
+    //dont need this
+ //no_processes_running = 1;
 
    int_enable_irq();
 
@@ -213,16 +244,10 @@ void hilevel_handler_irq(ctx_t* ctx) {
 }
 
 //NEEDED FOR FORK
-int next_empty_pcb(){
-   //if pcbs are filled contigiously
-   int first_free_index = no_processes_running;
-   for(int i = 0; i < no_processes ; i++){
-       if(pcb[i].status == STATUS_TERMINATED ){
-           return i;
-           break;
-       }
-   }
-   return first_free_index;
+pcb_t* next_empty_pcb(){
+  for(int i=0; i<no_processes; i++){
+      if(pcb[i].status == STATUS_TERMINATED) return &pcb[i];
+  }
 }
 
 
@@ -248,25 +273,23 @@ int next_empty_pcb(){
 
 
 //called by a process on itself
-void terminate_process(int index, ctx_t* ctx){
-   pcb[index].status   = STATUS_TERMINATED;
-   pcb[index].age      = 0;
-   pcb[index].priority = 0; //may not need to do this since its a terminated process
+void terminate_process(pcb_t* target, ctx_t* ctx){
+   target->status   = STATUS_TERMINATED;
+   target->age      = 0;
+   target->priority = 0; //may not need to do this since its a terminated process
    priority_schedule(ctx);
 }
 //Helper for fork
-void copy_pcb(int parent_process, int child_process , ctx_t* ctx){
-   memcpy(&pcb[child_process], &pcb[parent_process], sizeof(pcb_t));
-   memcpy(&pcb[child_process].ctx, ctx, sizeof(ctx_t));
-   pcb[ child_process ].status = STATUS_READY;
-   pcb[ child_process ].pid    = child_process;
-   pcb[ child_process ].age    = 0;
-   pcb[child_process].priority = pcb[parent_process].priority;
-   uint32_t stack_offset = allocate_stack(parent_process) - ctx->sp;
-   pcb[ child_process ].ctx.sp     = allocate_stack(child_process) - stack_offset;
+void copy_pcb(pcb_t* parent_process, pcb_t* child_process , ctx_t* ctx){
+   //memcpy(child_process, parent_process, sizeof(pcb_t));
+   memcpy(&child_process->ctx, ctx, sizeof(ctx_t));
+   child_process->status = STATUS_READY;
+   child_process->age    = 0;
+   child_process->priority = parent_process->priority;
+   uint32_t stack_offset = allocate_stack(parent_process->pid) - ctx->sp;
+   child_process->ctx.sp     = allocate_stack(child_process->pid) - stack_offset;
    //better to do it with stack pointers because of problem when subtracting by offset
-   memcpy((void*)(pcb[ child_process ].ctx.sp), (void*) (ctx->sp), stack_offset);
-   no_processes_running++;
+   memcpy((void*)(child_process->ctx.sp), (void*) (ctx->sp), stack_offset);
 }
 
 //SYSTEM CALLS
@@ -312,19 +335,18 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
 
            case SYS_FORK : {
 
-               int parent = current_executing;
-               int child = next_empty_pcb();
-               char child_pid = '?';
+               pcb_t* parent = current;
+               pcb_t* child = next_empty_pcb();
                copy_pcb(parent, child, ctx);
-               ctx->gpr[0] = child; //return pid of child for parent
-               pcb[child].ctx.gpr[0] = 0; // return value for child is 0
+               ctx->gpr[0] = child->pid; //return pid of child for parent
+               child->ctx.gpr[0] = 0; // return value for child is 0
 
                break;
              }
 
            //P5 should terminate after 25 prints -- it does
            case SYS_EXIT :{
-               terminate_process(current_executing,ctx);
+               terminate_process(current,ctx);
                break;
              }
            //replace current process image(text segment) with new process image -> THIS BASICALLY MEANS
@@ -335,29 +357,23 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
                PL011_putc( UART0, 'E', true );
                //memset((void*)(allocate_stack(current_executing)-offset), 0, offset);
                ctx->pc = ctx->gpr[0];
-               ctx->sp = allocate_stack(current_executing);
+               //ctx->sp = allocate_stack(current_executing);
                break;
            }
 
            case SYS_KILL :{
                pid_t pid = ctx->gpr[0];
                int x     = ctx->gpr[1];
-               //or loop through the processes and if pid == pcb[i].pid then terminate
-               //dont terminate a process that is already terminated/isn't there
-               terminate_process(pid,ctx);
-               //will probably break the schedueler -- it does
-               //trace the last executed pid?
-               //need to find a way to keep track of the last executed process
-               //and its index in the pcb
-               no_processes_running --;
-               //need to return r0 i think
-
-
+               pcb_t* target = NULL;
+               for(int i=0; i<no_processes;i++){
+                   if(pid == pcb[i].pid ) target = &pcb[i];
+               }
+               if(target!=NULL && target->status != STATUS_TERMINATED) terminate_process(target,ctx);
                break;
            }
            case SYS_NICE :{
-               //may need to cast
-               pcb[current_executing].pid = ctx->gpr[0];
+               int pid = ctx->gpr[0];
+               pcb[pid].priority = ctx->gpr[1];
 
            }
 
