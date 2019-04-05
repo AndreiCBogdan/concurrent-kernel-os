@@ -19,12 +19,12 @@
 #include   "GIC.h"
 #include "PL011.h"
 #include "SP804.h"
-#include "console.h"
+
 // Include functionality relating to the   kernel.
 
 #include "lolevel.h"
 #include     "int.h"
-
+#include  "defintions.h"
 /* The kernel source code is made simpler and more consistent by using
  * some human-readable type definitions:
  *
@@ -46,7 +46,6 @@ typedef enum {
   STATUS_EXECUTING,
   STATUS_WAITING,
   STATUS_TERMINATED
-
 } status_t;
 
 typedef struct {
@@ -61,6 +60,13 @@ typedef struct {
        int priority;
 } pcb_t;
 
+typedef int pipeid;
 
+typedef struct {
+    int        message;
+    bool          free;
+    bool       written;
+    bool        closed;
+} pipe_t;
 
 #endif

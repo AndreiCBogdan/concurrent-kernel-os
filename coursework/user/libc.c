@@ -1,7 +1,7 @@
 /* Copyright (C) 2017 Daniel Page <csdsp@bristol.ac.uk>
  *
- * Use of this source code is restricted per the CC BY-NC-ND license, a copy of 
- * which can be found via http://creativecommons.org (and should be included as 
+ * Use of this source code is restricted per the CC BY-NC-ND license, a copy of
+ * which can be found via http://creativecommons.org (and should be included as
  * LICENSE.txt within the associated archive or repository).
  */
 
@@ -52,6 +52,7 @@ void itoa( char* r, int x ) {
   return;
 }
 
+
 void yield() {
   asm volatile( "svc %0     \n" // make system call SYS_YIELD
               :
@@ -69,7 +70,7 @@ int write( int fd, const void* x, size_t n ) {
                 "mov r2, %4 \n" // assign r2 =  n
                 "svc %1     \n" // make system call SYS_WRITE
                 "mov %0, r0 \n" // assign r  = r0
-              : "=r" (r) 
+              : "=r" (r)
               : "I" (SYS_WRITE), "r" (fd), "r" (x), "r" (n)
               : "r0", "r1", "r2" );
 
@@ -84,8 +85,8 @@ int  read( int fd,       void* x, size_t n ) {
                 "mov r2, %4 \n" // assign r2 =  n
                 "svc %1     \n" // make system call SYS_READ
                 "mov %0, r0 \n" // assign r  = r0
-              : "=r" (r) 
-              : "I" (SYS_READ),  "r" (fd), "r" (x), "r" (n) 
+              : "=r" (r)
+              : "I" (SYS_READ),  "r" (fd), "r" (x), "r" (n)
               : "r0", "r1", "r2" );
 
   return r;
@@ -95,8 +96,8 @@ int  fork() {
   int r;
 
   asm volatile( "svc %1     \n" // make system call SYS_FORK
-                "mov %0, r0 \n" // assign r  = r0 
-              : "=r" (r) 
+                "mov %0, r0 \n" // assign r  = r0
+              : "=r" (r)
               : "I" (SYS_FORK)
               : "r0" );
 
@@ -130,7 +131,7 @@ int  kill( int pid, int x ) {
                 "mov r1, %3 \n" // assign r1 =    x
                 "svc %1     \n" // make system call SYS_KILL
                 "mov %0, r0 \n" // assign r0 =    r
-              : "=r" (r) 
+              : "=r" (r)
               : "I" (SYS_KILL), "r" (pid), "r" (x)
               : "r0", "r1" );
 
@@ -141,9 +142,68 @@ void nice( int pid, int x ) {
   asm volatile( "mov r0, %1 \n" // assign r0 =  pid
                 "mov r1, %2 \n" // assign r1 =    x
                 "svc %0     \n" // make system call SYS_NICE
-              : 
+              :
               : "I" (SYS_NICE), "r" (pid), "r" (x)
               : "r0", "r1" );
 
   return;
+
+}
+
+void kill_all(){
+    asm volatile("svc %0     \n" // make system call SYS_KILL_ALL
+                :
+                : "I" (SYS_KILL_ALL)
+                : );
+
+  return;
+}
+
+int pipe(int fds[2]){
+    int r;
+    asm volatile( "mov r0, %2 \n" // assign r0 = pid
+                  "svc %1     \n" // make system call PIPE_PIPE
+                  "mov %0, r0 \n" // assign r  = r0
+                : "=r"(r)
+                : "I" (SYS_PIPE), "r" (fds)
+                : "r0" );
+    return r;
+}
+
+void pipe_write(int fd, int data){
+
+    asm volatile( "mov r0, %1 \n" // assign r0 =  reader
+                  "mov r1, %2 \n" // assign r1 = data
+                  "svc %0     \n" // make system call PIPE_WRITE
+                :
+                : "I" (PIPE_WRITE), "r" (fd), "r" (data)
+                : "r0", "r1");
+
+    return;
+}
+
+int pipe_read(int fd, int delete){
+    int r;
+    asm volatile( "mov r0, %2 \n" // assign r0 = fd
+                  "mov r1, %3 \n" // assign r1 = delete
+                  "svc %1     \n" // make system call PIPE_READ
+                  "mov %0, r0 \n" // assign r  = r0
+                : "=r" (r)
+                : "I" (PIPE_READ), "r" (fd), "r" (delete)
+                : "r0", "r1" );
+
+    return r;
+
+}
+
+int pipe_close(int fd){
+    int r;
+    asm volatile( "mov r0, %2 \n" // assign r0 = fd
+                  "svc %1     \n" // make system call PIPE_CLOSE
+                  "mov %0, r0 \n" // assign r  = r0
+                : "=r"(r)
+                : "I" (PIPE_CLOSE), "r" (fd)
+                : "r0" );
+
+    return r;
 }

@@ -1,7 +1,7 @@
 /* Copyright (C) 2017 Daniel Page <csdsp@bristol.ac.uk>
  *
- * Use of this source code is restricted per the CC BY-NC-ND license, a copy of 
- * which can be found via http://creativecommons.org (and should be included as 
+ * Use of this source code is restricted per the CC BY-NC-ND license, a copy of
+ * which can be found via http://creativecommons.org (and should be included as
  * LICENSE.txt within the associated archive or repository).
  */
 
@@ -11,7 +11,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
+#include "defintions.h"
 // Define a type that that captures a Process IDentifier (PID).
 
 typedef int pid_t;
@@ -20,7 +20,7 @@ typedef int pid_t;
  *
  * 1. system call identifiers (i.e., the constant used by a system call
  *    to specify which action the kernel should take),
- * 2. signal identifiers (as used by the kill system call), 
+ * 2. signal identifiers (as used by the kill system call),
  * 3. status codes for exit,
  * 4. standard file descriptors (e.g., for read and write system calls),
  * 5. platform-specific constants, which may need calibration (wrt. the
@@ -38,6 +38,12 @@ typedef int pid_t;
 #define SYS_EXEC      ( 0x05 )
 #define SYS_KILL      ( 0x06 )
 #define SYS_NICE      ( 0x07 )
+#define SYS_KILL_ALL  ( 0x08 )
+#define SYS_PIPE      ( 0x09 )
+#define PIPE_WRITE    (  0xA )
+#define PIPE_READ     (  0xB )
+#define PIPE_CLOSE    (  0xC )
+
 
 #define SIG_TERM      ( 0x00 )
 #define SIG_QUIT      ( 0x01 )
@@ -53,25 +59,31 @@ typedef int pid_t;
 extern int  atoi( char* x        );
 // convert integer x into ASCII string r
 extern void itoa( char* r, int x );
-
 // cooperatively yield control of processor, i.e., invoke the scheduler
 extern void yield();
-
 // write n bytes from x to   the file descriptor fd; return bytes written
 extern int write( int fd, const void* x, size_t n );
 // read  n bytes into x from the file descriptor fd; return bytes read
 extern int  read( int fd,       void* x, size_t n );
-
 // perform fork, returning 0 iff. child or > 0 iff. parent process
 extern int  fork();
 // perform exit, i.e., terminate process with status x
 extern void exit(       int   x );
 // perform exec, i.e., start executing program at address x
 extern void exec( const void* x );
-
 // for process identified by pid, send signal of x
 extern int  kill( pid_t pid, int x );
 // for process identified by pid, set  priority to x
 extern void nice( pid_t pid, int x );
+//terminate all processes bar the console
+extern void kill_all();
+//initialises pipe between current process and given process(identified by the pid),returns pipe_id
+extern int pipe(int fds[2]);
+//write data to pipe
+extern void pipe_write(int fd, int data);
+//read from pipe
+extern int pipe_read(int fd, int delete);
+//close pipe
+extern int pipe_close(int fd);
 
 #endif
