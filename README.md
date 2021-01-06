@@ -1,1 +1,1 @@
-# 2nd Piece of Coursework for Concurrent: Kernel OS
+Concurrent coursework: kernel operating system implemented in c and assembly from scratch.
